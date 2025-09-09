@@ -1,0 +1,7 @@
+/build/
+/library/
+/.vscode/
+*.o
+*.lib
+*.a
+*.exe
