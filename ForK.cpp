@@ -3,13 +3,54 @@
 #include "al.h"
 #include "glfw3.h"
 #include <iostream>
+#include <fstream>
 #include <chrono>
 #include <thread>
 #include <vector>
 #include <queue>
 #include <cmath>
+#include <cstring>
+
+const GLchar *shader1 = new char[123]{"#version 330 core\n"
+                                      "layout (location = 0) in vec3 aPos;\n"
+                                      "void main()\n"
+                                      "{\n"
+                                      "   gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
+                                      "}\0"};
 
 static constexpr int KEY[4] = {GLFW_KEY_D, GLFW_KEY_F, GLFW_KEY_J, GLFW_KEY_K};
+
+static constexpr float game_vertices[] = {
+    // 顶点。
+    -0.2f, -1.0f, 0.0f, // 第一条线起点
+    -0.2f, 1.0f, 0.0f,  // 第一条线终点
+    0.2f, -1.0f, 0.0f,  // 第二条线起点
+    0.2f, 1.0f, 0.0f,   // 第二条线终点
+    0.6f, -1.0f, 0.0f,  // 第三条线起点
+    0.6f, 1.0f, 0.0f,   // 第三条线终点
+    1.0f, -1.0f, 0.0f,  // 第四条线起点
+    1.0f, 1.0f, 0.0f    // 第四条线终点
+};
+
+struct note
+{
+    int offset; // offset (milliseconds)
+    int type;
+};
+
+struct Shader
+{
+    char *program;
+    int length;
+    int shaderId;
+};
+
+struct Point3d
+{
+    float x;
+    float y;
+    float z;
+};
 
 inline constexpr void frameSizeCallback(GLFWwindow *window, int width, int height) noexcept
 {
@@ -26,18 +67,21 @@ inline constexpr void info(const char *message) noexcept
     std::cerr << "[Info]:" << message << std::endl;
 }
 
-struct note
+inline Point3d mkPt(float x, float y, float z) noexcept
 {
-    int offset; // offset (milliseconds)
-    int type;
-};
+    Point3d point;
+    point.x = x, point.y = y, point.z = z;
+    return point;
+}
 
 class Program
 {
 private:
+    int program;
+    int count;
     int status;
     int flush; // status has been changed but not changes is applied.
-    int temp[4];
+    int temp[10];
     int flag;
     std::thread *handle;
     std::chrono::system_clock::time_point startTick, tick, frametick;
@@ -49,20 +93,23 @@ private:
     void pgame(void);
     void bgame(void);
 
+protected:
+    void drawLine(Point3d &start, Point3d &end);
+
 public:
     Program();
     ~Program();
-    void run();
+    void run(void);
 
 protected:
-    void process();
+    void process(void);
     void brush(void);
 };
 
 int main(int argc, char *argv[])
 {
-    Program program;
-    program.run();
+    Program _program;
+    _program.run();
     return 0;
 }
 
@@ -70,12 +117,11 @@ void Program::process(void)
 {
     while (status && !glfwWindowShouldClose(window))
     {
-        if (flush == 1)
+        while (flush == 1)
         {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
             continue;
         }
-
         tick = std::chrono::system_clock::now();
         switch (status)
         {
@@ -91,60 +137,101 @@ void Program::process(void)
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
+    info("Control Process exiting...");
     return;
 }
 
 void Program::pmenu(void)
 {
-    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS && temp[5] == 0)
     {
-        status = 0;
+        --status, flush = 1, temp[5] = 1;
         return;
     }
-    if (glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_PRESS)
+    if (glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_PRESS && temp[4] == 0)
     {
-        status = 2;
-        flush = 1;
+        ++status, flush = 1, temp[4] = 1;
+        return;
     }
+    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_RELEASE && temp[5] == 1)
+        temp[5] = 0;
+    if (glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_RELEASE && temp[4] == 1)
+        temp[4] = 0;
     return;
 }
-
+/*
+int Program::readShader(const char *filename)
+{
+    int success;
+    char infoLog[512];
+    std::ifstream file;
+    file.open(filename, std::ios::in);
+    if (!file.is_open())
+        return 1;
+    file.seekg(0, std::ios::end);
+    shader[count].length = file.tellg();
+    file.seekg(0, std::ios::beg);
+    shader[count].program = new char[shader[count].length];
+    if (shader[count].program == nullptr)
+    {
+        file.close();
+        return 1;
+    }
+    file.read(shader[count].program, shader[count].length);
+    file.close();
+    shader[count].shaderId = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(shader[count].shaderId, 1, &(shader[count].program), nullptr);
+    glCompileShader(shader[count].shaderId);
+    glGetShaderiv(shader[0].shaderId, GL_COMPILE_STATUS, &success);
+    if (!success)
+    {
+        info(infoLog);
+        return 1;
+    }
+    glAttachShader(program, shader[count].shaderId);
+    glDeleteShader(shader[count].shaderId);
+    ++count;
+    return 0;
+}
+*/
 void Program::pchoose(void)
 {
-    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS && temp[5] == 0)
     {
-        status = 2;
-        flush = 1;
+        --status, flush = 1, temp[5] = 1;
         return;
     }
-    if (glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_PRESS)
+    if (glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_PRESS && temp[4] == 0)
     {
-        status = 3;
-        flush = 1;
+        ++status, flush = 1, temp[4] = 1;
         return;
     }
+    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_RELEASE && temp[5] == 1)
+        temp[5] = 0;
+    if (glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_RELEASE && temp[4] == 1)
+        temp[4] = 0;
+    return;
 }
 
 void Program::pgame(void)
 {
-    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS && temp[5] == 0)
     {
-        status = 2;
-        flush = 1;
-        // to do here...
-        // this way is for quit.
+        --status, flush = 1, temp[5] = 1;
+        // to do something here...
+        // this block is to set something that is quit music...
         return;
     }
+    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_RELEASE && temp[5] == 1)
+        temp[5] = 0;
+    if (glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_RELEASE && temp[4] == 1)
+        temp[4] = 0;
     for (int i = 0; i < 4; ++i)
     {
         if (glfwGetKey(window, KEY[i]) == GLFW_PRESS && temp[i] == 0)
-        {
             temp[i] = 1;
-        }
         if (glfwGetKey(window, KEY[i]) == GLFW_RELEASE)
-        {
             temp[i] = 0;
-        }
         if (notes[i].empty() || temp[i] == 0)
             continue;
         auto tOff = std::abs(notes[i].front().offset - std::chrono::duration_cast<std::chrono::milliseconds>(tick - startTick).count());
@@ -174,12 +261,30 @@ void Program::pgame(void)
 
 void Program::bgame(void)
 {
+    static GLuint VAO, VBO;
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+    glBindVertexArray(VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(game_vertices), game_vertices, GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), nullptr);
+    glEnableVertexAttribArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+    glUseProgram(program);
+    glBindVertexArray(VAO);
+    glDrawArrays(GL_LINES, 0, 8); // 绘制4条线，共8个顶点
+    // TODO ...
+    glBindVertexArray(0);
+    glDeleteVertexArrays(1, &VAO);
+    glDeleteBuffers(1, &VBO);
     return;
 }
 
-Program::Program()
+Program::Program(void)
 {
     status = flag = 0;
+    count = 1;
     handle = nullptr;
     window = nullptr;
     if (!glfwInit())
@@ -188,7 +293,7 @@ Program::Program()
         return;
     }
     flag |= 1;
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 }
@@ -205,7 +310,6 @@ Program::~Program()
 
 void Program::run(void)
 {
-
     window = glfwCreateWindow(900, 600, "ForK - A single four key music game!", nullptr, nullptr);
     if (!window)
     {
@@ -222,62 +326,87 @@ void Program::run(void)
         return;
     }
     flag |= 4, status = 1;
+    program = glCreateProgram();
+    const char *vertexShaderSource = "#version 330 core\n"
+                                     "layout (location = 0) in vec3 aPos;\n"
+                                     "void main()\n"
+                                     "{\n"
+                                     "   gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
+                                     "}\0";
+    const char *fragmentShaderSource = "#version 330 core\n"
+                                       "out vec4 FragColor;\n"
+                                       "void main()\n"
+                                       "{\n"
+                                       "   FragColor = vec4(0.8f, 0.2f, 0.2f, 1.0f);\n"
+                                       "}\0";
+    unsigned int vertexShader = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
+    glCompileShader(vertexShader);
+    int success;
+    char infoLog[512];
+    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
+    if (!success)
+    {
+        glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
+        error(infoLog);
+    }
+    unsigned int fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
+    glCompileShader(fragmentShader);
+    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
+    if (!success)
+    {
+        glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
+        error(infoLog);
+    }
+    program = glCreateProgram();
+    glAttachShader(program, vertexShader);
+    glAttachShader(program, fragmentShader);
+    glLinkProgram(program);
+    glGetProgramiv(program, GL_LINK_STATUS, &success);
+    if (!success)
+    {
+        glGetProgramInfoLog(program, 512, NULL, infoLog);
+        std::cerr << "Shader program linking failed: " << infoLog << std::endl;
+    }
+    glDeleteShader(vertexShader);
+    glDeleteShader(fragmentShader);
+    glLinkProgram(program);
     handle = new std::thread(process, this);
     brush();
     handle->join();
+    glDeleteProgram(program);
     return;
 }
 
 void Program::brush(void)
 {
+    glUseProgram(program);
     static constexpr std::chrono::milliseconds GAP = std::chrono::milliseconds(10);
     frametick = std::chrono::system_clock::now();
     while (!glfwWindowShouldClose(window))
     {
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
         if (!status)
             break;
         switch (status)
         {
         case 1:
             if (flush == 1)
-            {
                 info("Status 1");
-                flush = 0;
-            }
             break;
         case 2:
             if (flush == 1)
-            {
                 info("Status 2");
-                glColor3f(0.0, 0.0, 0.0);
-                flush = 0;
-            }
             break;
         case 3:
             if (flush == 1)
-            {
                 info("Status 3");
-                glColor3f(1.0, 1.0, 1.0);
-                glLineWidth(2.0f);
-                glBegin(GL_LINE);
-                // line 1
-                glVertex2d(-0.2, -1.0);
-                glVertex2d(-0.2, 1.0);
-                // line 2
-                glVertex2d(0.2, -1.0);
-                glVertex2d(0.2, 1.0);
-                // line 3
-                glVertex2d(0.6, -1.0);
-                glVertex2d(0.6, 1.0);
-                // line 3
-                glVertex2d(1.0, -1.0);
-                glVertex2d(1.0, 1.0);
-                glEnd();
-                flush = 0;
-            }
             bgame();
             break;
         }
+        flush = 0;
         glfwSwapBuffers(window);
         glfwPollEvents();
         std::this_thread::sleep_until(frametick + GAP);

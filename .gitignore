@@ -1,5 +1,5 @@
 /build/
-/library/
+/library/  
 /.vscode/
 *.o
 *.lib
