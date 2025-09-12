@@ -1,6 +1,7 @@
 /build/
 /library/  
 /.vscode/
+__*.cpp
 *.o
 *.lib
 *.a

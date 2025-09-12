@@ -7,7 +7,7 @@
 #include <chrono>
 #include <thread>
 #include <vector>
-#include <queue>
+#include <deque>
 #include <cmath>
 #include <cstring>
 
@@ -17,25 +17,115 @@ const GLchar *shader1 = new char[123]{"#version 330 core\n"
                                       "{\n"
                                       "   gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
                                       "}\0"};
-
+constexpr float speed = 0.003f;
+constexpr GLuint VSIZE = sizeof(float) * 3;
 static constexpr int KEY[4] = {GLFW_KEY_D, GLFW_KEY_F, GLFW_KEY_J, GLFW_KEY_K};
-
 static constexpr float game_vertices[] = {
-    // 顶点。
-    -0.2f, -1.0f, 0.0f, // 第一条线起点
-    -0.2f, 1.0f, 0.0f,  // 第一条线终点
-    0.2f, -1.0f, 0.0f,  // 第二条线起点
-    0.2f, 1.0f, 0.0f,   // 第二条线终点
-    0.6f, -1.0f, 0.0f,  // 第三条线起点
-    0.6f, 1.0f, 0.0f,   // 第三条线终点
-    1.0f, -1.0f, 0.0f,  // 第四条线起点
-    1.0f, 1.0f, 0.0f    // 第四条线终点
+    // stage 3 vertex group
+    // Line 1
+    -0.2f,
+    -1.0f,
+    0.0f,
+    -0.2f,
+    1.0f,
+    0.0f,
+    // Line 2
+    0.1f,
+    -1.0f,
+    0.0f,
+    0.1f,
+    1.0f,
+    0.0f,
+    // Line 3
+    0.4f,
+    -1.0f,
+    0.0f,
+    0.4f,
+    1.0f,
+    0.0f,
+    // Line 4
+    0.7f,
+    -1.0f,
+    0.0f,
+    0.7f,
+    1.0f,
+    0.0f,
+    // Line 5
+    1.0f,
+    -1.0f,
+    0.0f,
+    1.0f,
+    1.0f,
+    0.0f,
+    // Line 6
+    -0.2f,
+    -0.8f,
+    0.0f,
+    1.0f,
+    -0.8f,
+    0.0f,
+    // Quad 1
+    -0.2f,
+    -0.8f,
+    0.0f,
+    -0.2f,
+    -1.0f,
+    0.0f,
+    0.1f,
+    -0.8f,
+    0.0f,
+    0.1f,
+    -1.0f,
+    0.0f,
+    // Quad 2
+    0.1f,
+    -0.8f,
+    0.0f,
+    0.1f,
+    -1.0f,
+    0.0f,
+    0.4f,
+    -0.8f,
+    0.0f,
+    0.4f,
+    -1.0f,
+    0.0f,
+    // Quad 3
+    0.4f,
+    -0.8f,
+    0.0f,
+    0.4f,
+    -1.0f,
+    0.0f,
+    0.7f,
+    -0.8f,
+    0.0f,
+    0.7f,
+    -1.0f,
+    0.0f,
+    // Quad 4
+    0.7f,
+    -0.8f,
+    0.0f,
+    0.7f,
+    -1.0f,
+    0.0f,
+    1.0f,
+    -0.8f,
+    0.0f,
+    1.0f,
+    -1.0f,
+    0.0f,
 };
 
 struct note
 {
     int offset; // offset (milliseconds)
     int type;
+    note(const int &off, const int &tp) noexcept
+    {
+        offset = off, type = tp;
+    }
 };
 
 struct Shader
@@ -45,17 +135,8 @@ struct Shader
     int shaderId;
 };
 
-struct Point3d
-{
-    float x;
-    float y;
-    float z;
-};
-
-inline constexpr void frameSizeCallback(GLFWwindow *window, int width, int height) noexcept
-{
-    glViewport(0, 0, width, height);
-}
+auto frameSizeCallback = [](GLFWwindow *, int width, int height)
+{ glViewport(0, 0, width, height); };
 
 inline constexpr void error(const char *message) noexcept
 {
@@ -67,34 +148,26 @@ inline constexpr void info(const char *message) noexcept
     std::cerr << "[Info]:" << message << std::endl;
 }
 
-inline Point3d mkPt(float x, float y, float z) noexcept
-{
-    Point3d point;
-    point.x = x, point.y = y, point.z = z;
-    return point;
-}
-
 class Program
 {
 private:
     int program;
     int count;
     int status;
-    int flush; // status has been changed but not changes is applied.
+    int flush;
     int temp[10];
     int flag;
+    int allocation3;
+    GLuint VAO[2], VBO[2];
     std::thread *handle;
-    std::chrono::system_clock::time_point startTick, tick, frametick;
-    std::queue<struct note> notes[4];
+    std::chrono::system_clock::time_point startTick, tick, frameTick;
+    std::deque<note> notes[4];
     GLFWwindow *window;
 
     void pmenu(void);
     void pchoose(void);
     void pgame(void);
     void bgame(void);
-
-protected:
-    void drawLine(Point3d &start, Point3d &end);
 
 public:
     Program();
@@ -159,41 +232,6 @@ void Program::pmenu(void)
         temp[4] = 0;
     return;
 }
-/*
-int Program::readShader(const char *filename)
-{
-    int success;
-    char infoLog[512];
-    std::ifstream file;
-    file.open(filename, std::ios::in);
-    if (!file.is_open())
-        return 1;
-    file.seekg(0, std::ios::end);
-    shader[count].length = file.tellg();
-    file.seekg(0, std::ios::beg);
-    shader[count].program = new char[shader[count].length];
-    if (shader[count].program == nullptr)
-    {
-        file.close();
-        return 1;
-    }
-    file.read(shader[count].program, shader[count].length);
-    file.close();
-    shader[count].shaderId = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(shader[count].shaderId, 1, &(shader[count].program), nullptr);
-    glCompileShader(shader[count].shaderId);
-    glGetShaderiv(shader[0].shaderId, GL_COMPILE_STATUS, &success);
-    if (!success)
-    {
-        info(infoLog);
-        return 1;
-    }
-    glAttachShader(program, shader[count].shaderId);
-    glDeleteShader(shader[count].shaderId);
-    ++count;
-    return 0;
-}
-*/
 void Program::pchoose(void)
 {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS && temp[5] == 0)
@@ -232,23 +270,31 @@ void Program::pgame(void)
             temp[i] = 1;
         if (glfwGetKey(window, KEY[i]) == GLFW_RELEASE)
             temp[i] = 0;
+        if (!notes[i].empty() && notes[i].front().offset - std::chrono::duration_cast<std::chrono::milliseconds>(tick - startTick).count() < -160)
+        {
+            info("Miss!");
+            notes[i].pop_front();
+            continue;
+        }
         if (notes[i].empty() || temp[i] == 0)
             continue;
         auto tOff = std::abs(notes[i].front().offset - std::chrono::duration_cast<std::chrono::milliseconds>(tick - startTick).count());
         if (tOff <= 80)
         {
-            // todo here...
-            notes[i].pop();
+            info("Perfect!");
+            notes[i].pop_front();
             continue;
         }
-        if (tOff > 80 && tOff <= 200)
+        if (tOff > 80 && tOff <= 160)
         {
-            notes[i].pop();
+            info("Good!");
+            notes[i].pop_front();
             continue;
         }
-        if (tOff > 200 && tOff <= 300)
+        if (tOff > 160 && tOff <= 300)
         {
-            notes[i].pop();
+            info("Bad.");
+            notes[i].pop_front();
             continue;
         }
         if (tOff > 300)
@@ -261,30 +307,49 @@ void Program::pgame(void)
 
 void Program::bgame(void)
 {
-    static GLuint VAO, VBO;
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
-    glBindVertexArray(VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(game_vertices), game_vertices, GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), nullptr);
-    glEnableVertexAttribArray(0);
+    allocation3 = sizeof(game_vertices);
+    glUseProgram(program);
+    glBindVertexArray(VAO[0]);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO[0]);
+    glDrawArrays(GL_LINES, 0, 12);
+    for (int i = 0; i < 4; ++i)
+    {
+        if (temp[i] == 1)
+        {
+            glDrawArrays(GL_TRIANGLES, 12 + (i << 2), 3);
+            glDrawArrays(GL_TRIANGLES, 13 + (i << 2), 3);
+        }
+        glBindVertexArray(VAO[1]);
+        glBindBuffer(GL_ARRAY_BUFFER, VBO[1]);
+        std::vector<float> key;
+        auto _push = [&key](const float &x, const float &y)
+        { key.push_back(x), key.push_back(y), key.push_back(0.0f); };
+        for (const auto &_nt : notes[i])
+        {
+            auto delta = _nt.offset - std::chrono::duration_cast<std::chrono::milliseconds>(tick - startTick).count();
+            if (delta > 1.8 / speed || delta < -0.4 / speed)
+                continue;
+            float x1 = -0.2f + 0.3f * i, x2 = 0.1f + 0.3f * i;
+            float y1 = -0.725f + (delta * speed), y2 = -0.8f + (delta * speed);
+            _push(x1, y1);
+            _push(x1, y2);
+            _push(x2, y1);
+            _push(x1, y2);
+            _push(x2, y1);
+            _push(x2, y2);
+        }
+        glBufferSubData(GL_ARRAY_BUFFER, 0, key.size() * sizeof(float), key.data());
+        glDrawArrays(GL_TRIANGLES, 0, key.size());
+    }
+    glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
-    glUseProgram(program);
-    glBindVertexArray(VAO);
-    glDrawArrays(GL_LINES, 0, 8); // 绘制4条线，共8个顶点
-    // TODO ...
-    glBindVertexArray(0);
-    glDeleteVertexArrays(1, &VAO);
-    glDeleteBuffers(1, &VBO);
     return;
 }
 
 Program::Program(void)
 {
-    status = flag = 0;
-    count = 1;
+    status = flag = allocation3 = 0, count = 1;
     handle = nullptr;
     window = nullptr;
     if (!glfwInit())
@@ -310,7 +375,7 @@ Program::~Program()
 
 void Program::run(void)
 {
-    window = glfwCreateWindow(900, 600, "ForK - A single four key music game!", nullptr, nullptr);
+    window = glfwCreateWindow(1600, 900, "ForK - A single four key music game!", nullptr, nullptr);
     if (!window)
     {
         error("Failed to create GLFW window!");
@@ -367,11 +432,17 @@ void Program::run(void)
     if (!success)
     {
         glGetProgramInfoLog(program, 512, NULL, infoLog);
-        std::cerr << "Shader program linking failed: " << infoLog << std::endl;
+        std::cerr << "[ERROR]Shader program linking failed: " << infoLog << std::endl;
     }
     glDeleteShader(vertexShader);
     glDeleteShader(fragmentShader);
     glLinkProgram(program);
+    glLineWidth(3.0f);
+    // test
+    for (int i = 0; i < 20; ++i)
+    {
+        notes[0].push_back(note(i * 1000 + 2000, 1));
+    }
     handle = new std::thread(process, this);
     brush();
     handle->join();
@@ -382,8 +453,24 @@ void Program::run(void)
 void Program::brush(void)
 {
     glUseProgram(program);
+    glGenVertexArrays(2, VAO);
+    glGenBuffers(1, &VBO[0]);
+    glBindVertexArray(VAO[0]);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO[0]);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(game_vertices), game_vertices, GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
+    glEnableVertexAttribArray(0);
+    glBindVertexArray(0);
+    glGenBuffers(1, &VBO[1]);
+    glBindVertexArray(VAO[1]);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO[1]);
+    glBufferData(GL_ARRAY_BUFFER, VSIZE * 4096, nullptr, GL_DYNAMIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
+    glEnableVertexAttribArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
     static constexpr std::chrono::milliseconds GAP = std::chrono::milliseconds(10);
-    frametick = std::chrono::system_clock::now();
+    frameTick = std::chrono::system_clock::now();
     while (!glfwWindowShouldClose(window))
     {
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -402,15 +489,21 @@ void Program::brush(void)
             break;
         case 3:
             if (flush == 1)
+            {
+                startTick = std::chrono::system_clock::now();
                 info("Status 3");
+            }
             bgame();
             break;
         }
         flush = 0;
         glfwSwapBuffers(window);
         glfwPollEvents();
-        std::this_thread::sleep_until(frametick + GAP);
-        frametick = std::chrono::system_clock::now();
+        std::this_thread::sleep_until(frameTick + GAP);
+        frameTick = std::chrono::system_clock::now();
     }
+    glDeleteVertexArrays(2, VAO);
+    glDeleteBuffers(1, &VBO[0]);
+    glDeleteBuffers(1, &VBO[1]);
     return;
 }
