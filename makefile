@@ -12,7 +12,7 @@ OBJ := $(OBJ:.c=.o)
 all: $(TARGET)
 
 $(TARGET): $(OBJ)
-	$(CXX) -o $(TARDIR)$(TARGET) $(OBJ) $(LIBRARY)
+	$(CC) -o $(TARDIR)$(TARGET) $(OBJ) $(LIBRARY)
 
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@ $(INCLUDE)

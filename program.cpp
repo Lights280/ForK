@@ -1,6 +1,5 @@
 #include "program.h"
 
-
 void Program::pmain(void)
 {
     if (graphic.processKey(GLFW_KEY_ESCAPE) == 1)
@@ -24,7 +23,6 @@ void Program::pgame(void)
     if (graphic.processKey(GLFW_KEY_ESCAPE) == 1)
     {
         changeStatus(-1);
-        std::printf("1\n");
         for (int i = 0; i < 4; ++i)
             notes[i].clear();
         return;
@@ -74,7 +72,6 @@ void Program::pgame(void)
     if (sts == 0b1111)
     {
         changeStatus(1);
-        std::printf("2\n");
         for (int i = 0; i < 4; ++i)
             notes[i].clear();
     }

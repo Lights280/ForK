@@ -2,17 +2,24 @@
 
 const char *vertexShaderSource = "#version 330 core\n"
                                  "layout (location = 0) in vec3 aPos;\n"
+                                 "layout (location = 1) in vec3 aColor;\n"
+                                 "layout (location = 2) in vec2 aTexCoord;\n"
+                                 "out vec3 ourColor;\n"
+                                 "out vec2 TexCoord;\n"
                                  "void main()\n"
                                  "{\n"
-                                 "   gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
+                                 "  gl_Position = vec4(aPos, 1.0);\n"
+                                 "  ourColor = aColor;\n"
+                                 "  TexCoord = vec2(aTexCoord.x, aTexCoord.y);"
                                  "}\0";
 const char *fragmentShaderSource = "#version 330 core\n"
                                    "out vec4 FragColor;\n"
+                                   "in vec3 ourColor;\n"
+                                   "in vec2 TexCoord;uniform sampler2D texture1;uniform sampler2D texture2;\n"
                                    "void main()\n"
                                    "{\n"
-                                   "   FragColor = vec4(0.8f, 0.2f, 0.2f, 1.0f);\n"
+                                   "   FragColor = mix(texture(texture1, TexCoord), texture(texture2, TexCoord), 0.2);\n"
                                    "}\0";
-
 constexpr auto frameSizeCallback = [](GLFWwindow *, int width, int height)
 { glViewport(0, 0, width, height); };
 
@@ -59,7 +66,7 @@ Graphic::~Graphic()
 void Graphic::buildProgram(void)
 {
     program = glCreateProgram();
-    const auto mkShader = [this](const char *shaderSRC, const int type) -> std::pair<int, int>
+    const auto mkShader = [this](const char *shaderSRC, const int type) -> std::pair<bool, int>
     {
         unsigned int shader = glCreateShader(type);
         glShaderSource(shader, 1, &shaderSRC, nullptr);
@@ -69,12 +76,12 @@ void Graphic::buildProgram(void)
         glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
         if (!success)
         {
-            glGetShaderInfoLog(shader, 512, NULL, infoLog);
+            glGetShaderInfoLog(shader, 512, nullptr, infoLog);
             error(infoLog);
-            return std::pair(0, 0);
+            return std::pair(false, 0);
         }
         glAttachShader(program, shader);
-        return std::pair(1, shader);
+        return std::pair(true, std::move(shader));
     };
     std::pair<int, int> vShader = mkShader(vertexShaderSource, GL_VERTEX_SHADER),
                         fShader = mkShader(fragmentShaderSource, GL_FRAGMENT_SHADER);
@@ -89,7 +96,6 @@ void Graphic::buildProgram(void)
 uint32_t Graphic::generate(const int maxQuantity, const int type)
 {
     glUseProgram(program);
-    uint32_t id = graphicObjects.size();
     GraphicObject newVertex;
     glGenVertexArrays(2, &newVertex.vao);
     glGenBuffers(1, &newVertex.vbo);
@@ -100,7 +106,7 @@ uint32_t Graphic::generate(const int maxQuantity, const int type)
     glEnableVertexAttribArray(0);
     glBindVertexArray(0);
     graphicObjects.push_back(newVertex);
-    return id;
+    return graphicObjects.size() - 1;
 }
 
 void Graphic::bindData(const float *data, const int quantity, const int start, const uint32_t id)
@@ -130,6 +136,17 @@ void Graphic::clear(void)
     glfwPollEvents();
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
+    return;
+}
+
+void Graphic::deleteBack(const int start)
+{
+    for (uint64_t i = start; i <= graphicObjects.size(); ++i)
+    {
+        glDeleteBuffers(1, &graphicObjects[i].vbo);
+        glDeleteVertexArrays(1, &graphicObjects[i].vao);
+    }
+    graphicObjects.erase(graphicObjects.begin() + (start - 1), graphicObjects.end());
     return;
 }
 

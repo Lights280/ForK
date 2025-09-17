@@ -16,4 +16,3 @@ public:
     int getGrade(void);
     void reset(const int &total);
 };
-

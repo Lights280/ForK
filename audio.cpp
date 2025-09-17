@@ -1,6 +1,5 @@
 #include "audio.h"
 
-
 Audio::Audio()
 {
     device = alcOpenDevice(nullptr);
@@ -54,7 +53,7 @@ uint32_t Audio::generate(const char *filePath)
     alSourcef(newAudio.source, AL_GAIN, 1.0f);
     alSource3f(newAudio.source, AL_POSITION, 0.0f, 0.0f, 0.0f);
     alSource3f(newAudio.source, AL_VELOCITY, 0.0f, 0.0f, 0.0f);
-    alSourcei(newAudio.source, AL_LOOPING, AL_FALSE);
+    alSourcei(newAudio.source, AL_LOOPING, AL_TRUE);
     audioObjects.push_back(std::move(newAudio));
     return audioObjects.size() - 1;
 }

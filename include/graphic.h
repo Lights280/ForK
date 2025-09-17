@@ -11,6 +11,7 @@ private:
     };
     GLFWwindow *window;
     std::vector<GraphicObject> graphicObjects;
+    std::vector<int> texture;
     GLint program;
     GLint flag;
     int keySet[GLFW_KEY_LAST] = {0};
@@ -23,8 +24,8 @@ public:
     void bindData(const float *data, const int quantity, const int start, const uint32_t id);
     void draw(const uint32_t id, const int type, const int start, const int quantity);
     void clear(void);
+    void deleteBack(const int start);
     int processKey(int key);
-    // lambda macros
     const std::function<void(const int, const int, const int)> drawLines = [this](const uint32_t id, const int start, const int quantity)
     { draw(id, GL_LINES, start, 2 * quantity); },
                                                                drawTriangles = [this](const uint32_t id, const int start, const int quantity)
